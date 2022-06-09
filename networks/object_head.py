@@ -80,20 +80,20 @@ class Pose2DLayer(nn.Module):
         predx = x + grid_x
         predy = y + grid_y
 
-        if self.training:
-            predx = predx.view(nB, nH, nW, nV) / self.coord_norm_factor
-            predy = predy.view(nB, nH, nW, nV) / self.coord_norm_factor
+        #if self.training:
+        predx = predx.view(nB, nH, nW, nV) / self.coord_norm_factor
+        predy = predy.view(nB, nH, nW, nV) / self.coord_norm_factor
 
-            out_preds = [predx, predy, conf.view(nB, nH, nW, nV)]
-            return out_preds
+        out_preds = [predx, predy, conf.view(nB, nH, nW, nV)]
+        return out_preds
 
-        else:
-            predx = predx.view(nB, nH, nW, nV) / self.coord_norm_factor
-            predy = predy.view(nB, nH, nW, nV) / self.coord_norm_factor
+        #else:
+            # predx = predx.view(nB, nH, nW, nV) / self.coord_norm_factor
+            # predy = predy.view(nB, nH, nW, nV) / self.coord_norm_factor
 
-            conf = conf.view(nB, nH, nW, nV).cpu().numpy()
-            px = predx.cpu().numpy()
-            py = predy.cpu().numpy()
+            # conf = conf.view(nB, nH, nW, nV).cpu().numpy()
+            # px = predx.cpu().numpy()
+            # py = predy.cpu().numpy()
 
-            out_preds = [px, py, conf]
-            return out_preds
+            # out_preds = [px, py, conf]
+            # return out_preds

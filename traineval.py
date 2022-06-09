@@ -7,8 +7,12 @@ import torch.nn.parallel
 import torch.optim
 
 from utils.utils import Monitor, get_dataset, get_network, print_args, save_args, load_checkpoint, save_checkpoint
-from utils.epoch import single_epoch
+from utils.epoch import Train_epoch, Eval_epoch
 from utils.options import add_opts
+from utils.renderer import Renderer
+from utils._mano import MANO
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
 
 
 def main(args):
@@ -20,6 +24,10 @@ def main(args):
 
     # create exp result dir
     os.makedirs(args.host_folder, exist_ok=True)
+    #TODO: initialize renderer for the visualization
+    mano_model = MANO()
+    renderer = Renderer(faces=mano_model.face)
+    args.mano_model = mano_model
     # Initialize model
     model = get_network(args)
 
@@ -50,16 +58,22 @@ def main(args):
     val_loader = torch.utils.data.DataLoader(val_dat, batch_size=args.test_batch,
                                              shuffle=False, num_workers=int(args.workers),
                                              pin_memory=True, drop_last=False)
+    
+
+    #TODO: change 'single_epoch' function to 'Epoch'-'Train_epoch'-'Val_epoch' class, first initialize the epoch object
+    if not args.evaluate:
+        train_epoch = Train_epoch(dataloader=train_loader, model=model, optimizer=optimizer,save_path=args.host_folder, train=True, save_results=False, use_cuda=args.use_cuda,  args=args, renderer=renderer)
+    
+    val_epoch = Eval_epoch(dataloader=val_loader, model=model, 
+                            optimizer=None, save_path=args.host_folder,
+                            train=False, save_results=args.save_results, use_cuda=args.use_cuda,
+                            indices_order=val_dat.jointsMapSimpleToMano if hasattr(val_dat, "jointsMapSimpleToMano") else None, args=args,renderer=renderer)
 
     for epoch in range(start_epoch, args.epochs):
         train_dict = {}
         if not args.evaluate:
             print("Using lr {}".format(optimizer.param_groups[0]["lr"]))
-            train_avg_meters = single_epoch(
-                loader=train_loader, model=model, optimizer=optimizer,
-                epoch=epoch, save_path=args.host_folder, train=True,
-                save_results=False, use_cuda=args.use_cuda)
-
+            train_avg_meters = train_epoch.update(epoch=epoch)
             train_dict = {meter_name: meter.avg
                           for (meter_name, meter) in train_avg_meters.average_meters.items()}
             monitor.log_train(epoch + 1, train_dict)
@@ -67,10 +81,7 @@ def main(args):
         # Evaluate on validation set
         if args.evaluate or (epoch + 1) % args.test_freq == 0:
             with torch.no_grad():
-                single_epoch(loader=val_loader, model=model, epoch=epoch if not args.evaluate else None,
-                             optimizer=None, save_path=args.host_folder,
-                             train=False, save_results=args.save_results, use_cuda=args.use_cuda,
-                             indices_order=val_dat.jointsMapSimpleToMano if hasattr(val_dat, "jointsMapSimpleToMano") else None)
+                val_epoch.update(epoch=epoch if not args.evaluate else None)
 
         if not args.evaluate:
             if (epoch+1) % args.snapshot == 0:

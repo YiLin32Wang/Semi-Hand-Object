@@ -12,6 +12,9 @@ def vertices_reprojection(vertices, rt, k):
     p[1] = p[1] / (p[2] + 1e-5)
     return p[:2].T
 
+def vertices_reprojection_3d(vertices, rt, k):
+    p = np.matmul(rt[:3, 0:3], vertices.T) + rt[:3, 3].reshape(-1, 1)
+    return p.T
 
 def compute_REP_error(pred_pose, gt_pose, intrinsics, obj_mesh):
     reproj_pred = vertices_reprojection(obj_mesh, pred_pose, intrinsics)
@@ -19,7 +22,6 @@ def compute_REP_error(pred_pose, gt_pose, intrinsics, obj_mesh):
     reproj_diff = np.abs(reproj_gt - reproj_pred)
     reproj_bias = np.mean(np.linalg.norm(reproj_diff, axis=1), axis=0)
     return reproj_bias
-
 
 def compute_ADD_error(pred_pose, gt_pose, obj_mesh):
     add_gt = np.matmul(gt_pose[:3, 0:3], obj_mesh.T) + gt_pose[:3, 3].reshape(-1, 1)  # (3,N)
@@ -87,7 +89,7 @@ def eval_batch_obj(batch_output, obj_bbox,
     bs = batch_output[0].shape[0]
     obj_bbox = obj_bbox.cpu().numpy()
     for i in range(bs):
-        output = [batch_output[0][i], batch_output[1][i], batch_output[2][i]]
+        output = [batch_output[0][i].cpu().numpy(), batch_output[1][i].cpu().numpy(), batch_output[2][i].cpu().numpy()]
         bbox = obj_bbox[i]
         width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
         cord_upleft = [bbox[0], bbox[1]]
@@ -99,14 +101,16 @@ def eval_batch_obj(batch_output, obj_bbox,
             affinetrans = batch_affinetrans[i]
         else:
             affinetrans = None
-        pred_pose, p2d = fuse_test(output, width, height, intrinsics, bestCnt, bbox_3d, cord_upleft,
-                                   affinetrans=affinetrans)
+        pred_pose, p2d = fuse_test(output, width, height, intrinsics, bestCnt, bbox_3d, cord_upleft,affinetrans=affinetrans)
         # calculate REP and ADD error
         REP_error = compute_REP_error(pred_pose, obj_pose[i], intrinsics, mesh)
         ADD_error = compute_ADD_error(pred_pose, obj_pose[i], mesh)
+        if i == 0 :
+            reproj_pred = vertices_reprojection_3d(mesh, pred_pose, intrinsics)
+            reproj_gt = vertices_reprojection_3d(mesh, obj_pose[i], intrinsics)
         REP_res_dic[cls].append(REP_error)
         ADD_res_dic[cls].append(ADD_error)
-    return REP_res_dic, ADD_res_dic
+    return REP_res_dic, ADD_res_dic, reproj_pred, reproj_gt
 
 
 def eval_object_pose(REP_res_dic, ADD_res_dic, diameter_dic, outpath, unseen_objects=[], epoch=None):

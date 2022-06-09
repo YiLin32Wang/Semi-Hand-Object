@@ -21,9 +21,22 @@ def json_load(p):
         d = json.load(fi)
     return d
 
+def get_train_val_split(total_list, val_seq_list):
+    val_dict = {"val_list":[], "val_id_list":[]}
+    train_dict = {"train_list":[], "train_id_list":[]}
+    for i, name in enumerate(total_list):
+        seq = name.split('/')[0]
+        if seq in val_seq_list:
+            val_dict['val_list'].append(name)
+            val_dict['val_id_list'].append(i)
+        else:
+            train_dict['train_list'].append(name)
+            train_dict['train_id_list'].append(i)
+
+    return val_dict, train_dict
 
 def read_RGB_img(base_dir, seq_name, file_id, split):
-    img_filename = os.path.join(base_dir, split, seq_name, 'rgb', file_id + '.png')
+    img_filename = os.path.join(base_dir, split, seq_name, 'rgb', file_id + '.jpg') #TODO: change '.png' to '.jpg' cuz no png but only jpg in HO3D_v3
     img = Image.open(img_filename).convert("RGB")
     return img
 
@@ -47,13 +60,16 @@ def pose_from_RT(R, T):
 
 
 def projectPoints(xyz, K, rt=None):
-    xyz = np.array(xyz)
-    K = np.array(K)
+    coord_change_mat = np.array([[1., 0., 0.], [0, -1., 0.], [0., 0., -1.]], dtype=np.float32)
+    #xyz = np.array(xyz)
+    xyz = xyz.dot(coord_change_mat.T)
+    #K = np.array(K)
     if rt is not None:
         uv = np.matmul(K, np.matmul(rt[:3, :3], xyz.T) + rt[:3, 3].reshape(-1, 1)).T
     else:
-        uv = np.matmul(K, xyz.T).T
-    return uv[:, :2] / uv[:, -1:]
+        #uv = np.matmul(K, xyz.T).T
+        uv = xyz.dot(K.T)
+    return uv[:, :2] / uv[:, 2:]
 
 
 def load_objects_HO3D(obj_root):

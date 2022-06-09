@@ -1,0 +1,1 @@
+VISUAL_PATH = "/home/datassd/yilin/Outputs/"

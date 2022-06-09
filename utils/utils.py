@@ -5,6 +5,7 @@ import time
 import datetime
 import warnings
 import torch
+import numpy as np
 
 
 def progress_bar(msg=None):
@@ -49,14 +50,20 @@ class AverageMeters:
 class Monitor:
     def __init__(self, hosting_folder):
         self.hosting_folder = hosting_folder
+        os.makedirs(self.hosting_folder, exist_ok=True)
 
         self.train_path = os.path.join(hosting_folder, "train.txt")
         create_log_file(self.train_path)
 
-        os.makedirs(self.hosting_folder, exist_ok=True)
+        self.val_path = os.path.join(hosting_folder, "validation.txt")
+        create_log_file(self.val_path)
 
     def log_train(self, epoch, errors):
         log_errors(epoch, errors, self.train_path)
+
+    # TODO: add log_validation
+    def log_val(self, epoch, errors):
+        log_errors(epoch, errors, self.val_path)
 
 
 def create_log_file(log_path, log_name=""):
@@ -118,6 +125,8 @@ def load_checkpoint(model, resume_path, strict=True, device=None):
         if len(missing_states) > 0:
             warnings.warn("Missing keys ! : {}".format(missing_states))
         model.load_state_dict(state_dict, strict=strict)
+        start_epoch = checkpoint["epoch"]
+        return start_epoch
     else:
         raise ValueError("=> no checkpoint found at '{}'".format(resume_path))
 
@@ -128,16 +137,60 @@ def save_checkpoint(state, checkpoint="checkpoint", filename="checkpoint.pth.tar
 
 
 def get_dataset(args, mode):
-    from dataset.ho3d import HO3D
-    dataset = HO3D(dataset_root=args.HO3D_root, obj_model_root=args.obj_model_root,
-                   train_label_root="ho3d-process", mode=mode, inp_res=args.inp_res)
+    from dataset.ho3d import HO3D, my_HO3D
+    #dataset = HO3D(dataset_root=args.HO3D_root, obj_model_root=args.obj_model_root,
+    #               train_label_root="ho3d-process", mode=mode, inp_res=args.inp_res)
+    dataset = my_HO3D(dataset_root=args.HO3D_root, obj_model_root=args.obj_model_root,
+                   train_label_root="ho3d-process-my", mode=mode, inp_res=args.inp_res)
     return dataset
 
 
-def get_network(args):
+def get_network_Trans(args):
     from utils.manolayer_ho3d import ManoLayer
     mano_layer = ManoLayer(ncomps=45, center_idx=0, flat_hand_mean=True,
                            side="right", mano_root=args.mano_root, use_pca=False)
+    mano_layer.cuda()
+    # change coordinates for HO3D dataset to OpenGL coordinates
+    coord_change_mat = torch.tensor([[1., 0., 0.], [0, -1., 0.], [0., 0., -1.]], dtype=torch.float32)
+
+    if args.resume is not None:
+        pretrained = False
+    else:
+        pretrained = True
+
+    from models import HONet_Trans, HOModel_Trans
+
+    net = HONet_Trans(args, stacks=args.stacks, channels=args.channels, blocks=args.blocks,
+                mano_layer=mano_layer, mano_neurons=args.mano_neurons,
+                transformer_depth=args.transformer_depth,
+                transformer_head=args.transformer_head,
+                coord_change_mat=coord_change_mat,
+                reg_object=True, pretrained=pretrained)
+
+    net.to('cuda')
+    net = torch.nn.DataParallel(net)
+    #net = torch.nn.parallel.DistributedDataParallel(net, device_ids=[args.local_rank], 
+    #        output_device=args.local_rank,
+    #        find_unused_parameters=True,
+    #    )
+    #net = torch.nn.parallel.DistributedDataParallel(net, find_unused_parameters=True)
+
+    model = HOModel_Trans(net,args.mano_model, mano_lambda_verts3d=args.mano_lambda_verts3d,
+                    mano_lambda_joints3d=args.mano_lambda_joints3d,
+                    mano_lambda_manopose=args.mano_lambda_manopose,
+                    mano_lambda_manoshape=args.mano_lambda_manoshape,
+                    mano_lambda_regulshape=args.mano_lambda_regulshape,
+                    mano_lambda_regulpose=args.mano_lambda_regulpose,
+                    lambda_joints2d=args.lambda_joints2d,
+                    lambda_objects=args.lambda_objects)
+
+    return model
+
+def get_network(args):
+    from utils.manolayer_ho3d import ManoLayer
+    mano_layer = ManoLayer(ncomps=6, center_idx=0, flat_hand_mean=True,
+                           side="right", mano_root=args.mano_root, use_pca=False)
+    
     # change coordinates for HO3D dataset to OpenGL coordinates
     coord_change_mat = torch.tensor([[1., 0., 0.], [0, -1., 0.], [0., 0., -1.]], dtype=torch.float32)
 
@@ -167,6 +220,7 @@ def get_network(args):
                     lambda_objects=args.lambda_objects)
 
     return model
+
 
 
 def dump(pred_out_path, xyz_pred_list, verts_pred_list):

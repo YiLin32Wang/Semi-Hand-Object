@@ -1,6 +1,47 @@
 import torch
 import torch.nn.functional as F
 
+def keypoint_2d_loss(criterion_keypoints, pred_keypoints_2d, gt_keypoints_2d):
+    """
+    Compute 2D reprojection loss if 2D keypoint annotations are available.
+    The confidence is binary and indicates whether the keypoints exist or not.
+    """
+    #conf = gt_keypoints_2d[:, :, -1].unsqueeze(-1).clone()
+    #loss = (conf * criterion_keypoints(pred_keypoints_2d, gt_keypoints_2d[:,:,-1])).mean()
+    loss = (criterion_keypoints(pred_keypoints_2d, gt_keypoints_2d)).mean()
+    return loss
+
+def keypoint_3d_loss(criterion_keypoints, pred_keypoints_3d, gt_keypoints_3d):
+    """
+    Compute 3D keypoint loss if 3D keypoint annotations are available.
+    """
+    conf = gt_keypoints_3d[:, :, -1].unsqueeze(-1).clone()
+    gt_keypoints_3d = gt_keypoints_3d[:, :, :-1].clone()
+    #gt_keypoints_3d = gt_keypoints_3d[:,:,:-1]
+    #conf = conf[has_pose_3d == 1]
+    #pred_keypoints_3d = pred_keypoints_3d[:,:,:-1]
+    if len(gt_keypoints_3d) > 0:
+        gt_root = gt_keypoints_3d[:, 0,:]
+        gt_keypoints_3d = gt_keypoints_3d - gt_root[:, None, :]
+        pred_root = pred_keypoints_3d[:, 0,:]
+        pred_keypoints_3d = pred_keypoints_3d - pred_root[:, None, :]
+        loss = (conf * criterion_keypoints(pred_keypoints_3d, gt_keypoints_3d)).mean()
+        #loss = (criterion_keypoints(pred_keypoints_3d, gt_keypoints_3d)).mean()
+        return loss
+    else:
+        return torch.FloatTensor(1).fill_(0.).cuda()
+
+def vertices_loss(criterion_vertices, pred_vertices, gt_vertices):
+    """
+    Compute per-vertex loss if vertex annotations are available(no has_smpl argument since all training data has mesh annotations).
+    """
+    pred_vertices_with_shape = pred_vertices
+    gt_vertices_with_shape = gt_vertices
+    
+    if len(gt_vertices_with_shape) > 0:
+        return criterion_vertices(pred_vertices_with_shape, gt_vertices_with_shape)
+    else:
+        return torch.FloatTensor(1).fill_(0.).cuda()
 
 class Joint2DLoss():
     def __init__(self, lambda_joints2d):

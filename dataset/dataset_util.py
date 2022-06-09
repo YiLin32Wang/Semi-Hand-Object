@@ -73,12 +73,14 @@ def get_bbox_joints(joints2d, bbox_factor=1.1):
 def normalize_joints(joints2d, bbox):
     bbox = bbox.reshape(2, 2)
     joints2d = (joints2d - bbox[0, :]) / (bbox[1, :] - bbox[0, :])
+    #joints2d = joints2d / 1000.0
     return joints2d
 
 
 def recover_joints(joints2d, bbox):
     bbox = bbox.reshape(2, 2)
     joints2d = joints2d * (bbox[1, :] - bbox[0, :]) + bbox[0, :]
+    #joints2d = joints2d * 1000.0
     return joints2d
 
 
@@ -210,4 +212,23 @@ def fuse_bbox(bbox_1, bbox_2, img_shape, scale_factor=1.):
     max_delta = max(delta_x, delta_y)
     scale = max_delta * scale_factor
     return center, scale
+
+def get_vjmask(percent = 0.2, num_vertices=195, num_joints=21):
+    #num_joints = 21
+    mjm_mask = np.ones((num_joints,1))
+    pb = np.random.random_sample()
+    masked_num = int(pb * percent * num_joints) # at most x% of joints could be masked
+    indices = np.random.choice(np.arange(num_joints), replace=False, size=masked_num)
+    mjm_mask[indices, :] = 0.0
+    #mjm_mask = torch.from_numpy(mjm_mask).float()
+
+    #num_vertices = 778
+    mvm_mask = np.ones((num_vertices,1))
+    pb = np.random.random_sample()
+    masked_num = int(pb * percent * num_vertices) # at most x% of joints could be masked
+    indices = np.random.choice(np.arange(num_vertices), replace=False, size=masked_num)
+    mvm_mask[indices, :] = 0.0
+    #mvm_mask = torch.from_numpy(mvm_mask).float()
+
+    return mjm_mask, mvm_mask
 

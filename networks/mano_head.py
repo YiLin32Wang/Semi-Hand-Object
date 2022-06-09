@@ -185,6 +185,11 @@ class mano_regHead(nn.Module):
         # Shape layers
         self.shape_reg = nn.Linear(mano_base_neurons[-1], 10)
 
+        #TODO: define the camra translation parameter regression layer
+        self.cam_reg = nn.Linear(mano_base_neurons[-1],75)
+        #self.cam_reg2 = nn.Linear(195+21,150)
+        self.cam_reg2 = nn.Linear(75,3)
+
         self.mano_layer = mano_layer
 
         if coord_change_mat is not None:
@@ -199,6 +204,14 @@ class mano_regHead(nn.Module):
         pred_mano_shape = self.shape_reg(mano_features)
         pred_mano_pose = mat2aa(pred_mano_pose_rotmat.view(-1, 3, 3)).contiguous().view(-1, self.mano_pose_size)
         pred_verts, pred_joints = self.mano_layer(th_pose_coeffs=pred_mano_pose, th_betas=pred_mano_shape)
+
+        #TODO: forward the camera translation prediction
+        x = self.cam_reg(mano_features)
+        #print(f"check shape of x: \n {x.shape}")
+        cam_param = self.cam_reg2(x)
+        #cam_param = cam_param.transpose(1,0)
+        cam_param = cam_param.squeeze()
+        
 
         if mano_params is not None:
             gt_mano_shape = mano_params[:, self.mano_pose_size:]
@@ -231,4 +244,4 @@ class mano_regHead(nn.Module):
                 "mano_pose": pred_mano_pose_rotmat,
                 "mano_pose_aa": pred_mano_pose}
 
-        return pred_mano_results, gt_mano_results
+        return cam_param, pred_mano_results, gt_mano_results

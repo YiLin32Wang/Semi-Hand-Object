@@ -279,3 +279,4 @@ class hand_Encoder(nn.Module):
         out = x.view(x.size(0), -1)
 
         return out
+

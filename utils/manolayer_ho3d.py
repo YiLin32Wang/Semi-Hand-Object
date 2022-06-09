@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch.nn import Module
 
-from mano.webuser.smpl_handpca_wrapper_HAND_only import ready_arguments
+from mano.webuser.smpl_handpca_wrapper_HAND_only import ready_arguments, load_model
 from manopth import rodrigues_layer, rotproj, rot6d
 from manopth.tensutils import (th_posemap_axisang, th_with_zeros, th_pack, subtract_flat_id, make_list)
 
@@ -225,20 +225,29 @@ class ManoLayer(Module):
         ], 1)
 
         th_verts = (th_T * th_rest_shape_h.unsqueeze(1)).sum(2).transpose(2, 1)
+        #th_verts = (th_T * th_rest_shape_h.unsqueeze(1)).sum(2)
         th_verts = th_verts[:, :, :3]
+        #print(th_verts)
+        #temp = torch.stack([-th_verts[:,:,0], th_verts[:,:,1], -th_verts[:,:,2]], dim=2)
+        #th_verts = temp
+        #print(th_verts)
         th_jtr = th_results_global[:, :, :3, 3]
+        #temp = torch.stack([-th_jtr[:,:,0], th_jtr[:,:,1], -th_jtr[:,:,2]], dim=2)
+        #th_jtr = temp
         # In addition to MANO reference joints we sample vertices on each finger
         # to serve as finger tips
         # Slight different from manopth to adapt to HO3D Dataset
         if self.side == 'right':
             tips = th_verts[:, [728, 353, 442, 576, 694]]
+            #tips = th_verts[:, [745, 317, 444, 556, 673]]
         else:
             tips = th_verts[:, [728, 353, 442, 576, 694]]
+            #tips = th_verts[:, [745, 317, 445, 556, 673]]
 
         th_jtr = torch.cat([th_jtr, tips], 1)
 
         # Reorder joints to match visualization utilities
-        th_jtr = th_jtr[:, [0, 13, 14, 15, 16, 1, 2, 3, 17, 4, 5, 6, 18, 10, 11, 12, 19, 7, 8, 9, 20]]
+        th_jtr = th_jtr[:, [0, 13, 14, 15, 16, 1, 2, 3, 17, 4, 5, 6, 18, 10, 11, 12, 19, 7, 8, 9, 20]] #在manolayer代码中自带了转换joint order的代码
 
         center_joint = th_jtr[:, self.center_idx].unsqueeze(1)
         th_jtr = th_jtr - center_joint
@@ -253,4 +262,4 @@ class ManoLayer(Module):
             th_verts = th_verts * self.scale_factor
             th_jtr = th_jtr * self.scale_factor
 
-        return th_verts, th_jtr
+        return th_verts, th_jtr, center_joint
